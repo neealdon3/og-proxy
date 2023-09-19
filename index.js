@@ -1,7 +1,7 @@
 import createBareServer from "@tomphttp/bare-server-node";
 import express from "express";
 import { createServer } from "node:http";
-import { uvPath } from "@titaniumnetwork-dev/ultraviolet";
+import { DynamicPath } from "@NebulaServices/Dynamic";
 import { join, dirname } from "node:path";
 import { hostname } from "node:os";
 import { fileURLToPath } from "url";
@@ -11,19 +11,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const bare = createBareServer("/bare/");
 const app = express();
 
-var publicPath = __dirname + "/public"
+var publicPath = __dirname + "/"
 
 // Load our publicPath first and prioritize it over UV.
 app.use(express.static(publicPath));
 // Load vendor files last.
 // The vendor's uv.config.js won't conflict with our uv.config.js inside the publicPath directory.
-app.use("/uv/", express.static(uvPath));
-
-// Error for everything else
-app.use((req, res) => {
-  res.status(404);
-  res.sendFile(join(publicPath, "/404.html"));
-});
+app.use("/dynamic/", express.static(DynamicPath));
 
 const server = createServer();
 
