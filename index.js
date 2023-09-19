@@ -1,55 +1,78 @@
-import createBareServer from "@tomphttp/bare-server-node";
-import express from "express";
-import { createServer } from "node:http";
-import { join, dirname } from "node:path";
-import { hostname } from "node:os";
-import { fileURLToPath } from "url";
+import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import fastifyCompress from '@fastify/compress';
+import { createBareServer } from '@tomphttp/bare-server-node';
+import { createServer } from 'http';
+import chalk from 'chalk';
+import open from 'open';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const gitCommitInfo = require('git-commit-info');
+
+
+if (!existsSync("./dist")) await import("./esbuild.prod.js");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const bare = createBareServer("/bare/");
-const app = express();
+const port = process.env.PORT || 3000;
+const _v = process.env.npm_package_version;
+const info = { 
+  hashShort: `${JSON.stringify(gitCommitInfo().shortHash).replace('"', "").replace("/", "").replace('\"', "")}`,
+  hash: `${JSON.stringify(gitCommitInfo().hash).replace('"', "").replace("/", "").replace('\"', "")}`,
+  version: _v, 
+}
 
-var publicPath = __dirname + "/"
+const bare = createBareServer('/bare/');
+const serverFactory = (handler, opts) => {
+  return createServer()
+    .on("request", (req, res) => {
+      if (req.url === "/info") {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(info));
+      } else if (bare.shouldRoute(req)) {
+        bare.routeRequest(req, res);
+      } else {
+        handler(req, res)
+      }
+    }).on("upgrade", (req, socket, head) => {
+      if (bare.shouldRoute(req)) {
+        bare.routeUpgrade(req, socket, head);
+      } else {
+        socket.end();
+      }
+    });
+}
+const fastify = Fastify({ serverFactory });
+fastify.register(fastifyStatic, {
+  root: join(__dirname, "./static"),
+  decorateReply: false
+});
+fastify.register(fastifyStatic, {
+  root: join(__dirname, "./dist"),
+  prefix: "/dynamic/",
+  decorateReply: false
+});
+fastify.register(fastifyCompress, {
+  encodings: ["br"]
+});
 
-
-const server = createServer();
-
-server.on("request", (req, res) => {
-  if (bare.shouldRoute(req)) {
-    bare.routeRequest(req, res);
-  } else {
-    app(req, res);
+const URL = `http://localhost:${port}/`;
+fastify.listen({ port }, async (err) => {
+  if (err && err.code === "EADDRINUSE") {
+    console.log(chalk.red.bold(`[Dynamic ${_v}] `) + "Port is already in use! Please close any apps using port " + chalk.bold.underline.red(port) + " and try again.");
+    process.exit(1);
+  } else if (err) {
+    console.log(chalk.bold.red(`[Dynamic ${_v}] `) + "An error occurred while starting the server! \n" + err);
+    process.exit(1);
   }
-});
-
-server.on("upgrade", (req, socket, head) => {
-  if (bare.shouldRoute(req)) {
-    bare.routeUpgrade(req, socket, head);
-  } else {
-    socket.end();
+  console.log(chalk.bold('Thanks for using Dynamic!'), chalk.red(`Please notice that ${chalk.red.bold('dynamic is currently in public BETA')}. please report all issues to the GitHub page. `))
+  console.log(chalk.green.bold(`Dynamic ${_v} `) + "live at port " + chalk.bold.green(port));
+  try {
+    await open(URL);
+  } catch (ERR) {
+    console.error(ERR);
   }
-});
-
-let port = parseInt(process.env.PORT || "");
-
-if (isNaN(port)) port = 8080;
-
-server.on("listening", () => {
-  const address = server.address();
-
-  // by default we are listening on 0.0.0.0 (every interface)
-  // we just need to list a few
-  console.log("Listening on:");
-  console.log(`\thttp://localhost:${address.port}`);
-  console.log(`\thttp://${hostname()}:${address.port}`);
-  console.log(
-    `\thttp://${
-      address.family === "IPv6" ? `[${address.address}]` : address.address
-    }:${address.port}`
-  );
-});
-
-server.listen({
-  port,
 });
