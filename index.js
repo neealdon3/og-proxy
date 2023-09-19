@@ -1,7 +1,6 @@
 import createBareServer from "@tomphttp/bare-server-node";
 import express from "express";
 import { createServer } from "node:http";
-import { DynamicPath } from "@NebulaServices/Dynamic";
 import { join, dirname } from "node:path";
 import { hostname } from "node:os";
 import { fileURLToPath } from "url";
@@ -13,11 +12,6 @@ const app = express();
 
 var publicPath = __dirname + "/"
 
-// Load our publicPath first and prioritize it over UV.
-app.use(express.static(publicPath));
-// Load vendor files last.
-// The vendor's uv.config.js won't conflict with our uv.config.js inside the publicPath directory.
-app.use("/dynamic/", express.static(DynamicPath));
 
 const server = createServer();
 
